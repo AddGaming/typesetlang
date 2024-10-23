@@ -1,3 +1,4 @@
+@echo off
 cd src
 echo --------- GCC ------------- 
 gcc main.c -Wall -Wextra -o main.exe

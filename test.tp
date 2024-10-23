@@ -75,7 +75,7 @@ fun struct_manip(x: Combine) -> i8 where
     /* this works since x.x is <= 100 (3) */
         x.x + 10 
     } else {
-    /* this works since (1) & (2) imply that x.y < x.x < 128*/
+    /* this works since (1) & (2) imply that x.y < x.x < 128 */
         x.y + 1  
     }
 }
