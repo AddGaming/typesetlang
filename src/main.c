@@ -1,7 +1,7 @@
 #include <stdio.h>
+#include <assert.h>
 #include "rstd/rstd.h"
 #include "rstd/rstd.c"
-#define _CRT_SECURE_NO_WARNINGS
 
 // TYPES
 
@@ -10,10 +10,14 @@ typedef enum {
     STRUCT,
     UNSAVE,
     NAME,
+    ARROW,
     OPAR,
     CPAR,
     COL,
     ADD,
+    SUB,
+    MUL,
+    DIV,
     LT,
     GT,
     EQ,
@@ -91,6 +95,22 @@ TokenState single_char_tk(const TokenType type, TokenState state, const size_t i
     return state;
 }
 
+TokenState double_char_tk(const TokenType type, TokenState state, const size_t i) {
+    if (state.buff.count > 0) {
+        Token new_name = name_or_keyword(state.buff, i);
+        Token new_cbr  = {type, i, i+1};
+        state.buff.count = 0;
+        TokenDa new_acc = insert_TokenDa(state.acc, new_name).result;
+                new_acc = insert_TokenDa(new_acc,   new_cbr ).result;
+        state.acc = new_acc;
+    } else {
+        Token   new_cbr = {type, i, i+1};
+        TokenDa new_acc = insert_TokenDa(state.acc, new_cbr ).result;
+        state.acc = new_acc;
+    }
+    return state;
+}
+
 TokenDa tokenize(FILE* file, TokenState state, const size_t i) {
 
     int c = fgetc(file);
@@ -136,15 +156,47 @@ TokenDa tokenize(FILE* file, TokenState state, const size_t i) {
         return tokenize(file, state, i+1);
     } else if (c == '<' || c == '>' || c == '-' || c == '*' || c == '/') {
         int d = peak(file);
-        if        (d == EOF) { 
-            return state.acc; 
-        } else if (c == '<' || d == '=') {
-        } else if (c == '>' || d == '=') {
-        } else if (c == '-' || d == '>') {
-        } else if (c == '/' || d == '*') {
-        } else if (c == '*' || d == '/') {
-            
+        // Matches
+        if        (c == '<' && d == '=') {
+            state = double_char_tk(LTE, state, i);
+            fseek(file, 1, SEEK_CUR);
+            return tokenize(file, state, i+1);
+        } else if (c == '>' && d == '=') {
+            state = double_char_tk(GTE, state, i);
+            fseek(file, 1, SEEK_CUR);
+            return tokenize(file, state, i+1);
+        } else if (c == '-' && d == '>') {
+            state = double_char_tk(ARROW, state, i);
+            fseek(file, 1, SEEK_CUR);
+            return tokenize(file, state, i+1);
+        } else if (c == '/' && d == '*') {
+            state = double_char_tk(OC, state, i);
+            fseek(file, 1, SEEK_CUR);
+            return tokenize(file, state, i+1);
+        } else if (c == '*' && d == '/') {
+            state = double_char_tk(CC, state, i);
+            fseek(file, 1, SEEK_CUR);
+            return tokenize(file, state, i+1);
+        // Doesnt match
+        } else if (c == '<' && d != '=') {
+            state = single_char_tk(LT, state, i);
+            return tokenize(file, state, i);
+        } else if (c == '>' && d != '=') {
+            state = single_char_tk(GT, state, i);
+            return tokenize(file, state, i);
+        } else if (c == '-' && d != '>') {
+            state = single_char_tk(SUB, state, i);
+            return tokenize(file, state, i);
+        } else if (c == '/' && d != '*') {
+            state = single_char_tk(DIV, state, i);
+            return tokenize(file, state, i);
+        } else if (c == '*' && d != '/') {
+            state = single_char_tk(MUL, state, i);
+            return tokenize(file, state, i);
         } else {
+            // UNREACHABLE
+            err_redln("UNREACHABLE TOKENIZATION STATE!")
+            return state.acc;
         }
     } else {
         state.buff = insert_charDa(state.buff, c).result;
@@ -179,11 +231,23 @@ void print_tokens(const TokenDa tokens) {
             case ADD:
                 yellowln("+\t%zu\t%zu", tokens.ptr[i].start, tokens.ptr[i].end);
                 break;
+            case SUB:
+                yellowln("-\t%zu\t%zu", tokens.ptr[i].start, tokens.ptr[i].end);
+                break;
+            case DIV:
+                yellowln("/\t%zu\t%zu", tokens.ptr[i].start, tokens.ptr[i].end);
+                break;
+            case MUL:
+                yellowln("*\t%zu\t%zu", tokens.ptr[i].start, tokens.ptr[i].end);
+                break;
             case STRUCT:
                 yellowln("struct\t%zu\t%zu", tokens.ptr[i].start, tokens.ptr[i].end);
                 break;
             case UNSAVE:
                 yellowln("unsave\t%zu\t%zu", tokens.ptr[i].start, tokens.ptr[i].end);
+                break;
+            case ARROW:
+                yellowln("->\t%zu\t%zu", tokens.ptr[i].start, tokens.ptr[i].end);
                 break;
             case LT:
                 yellowln("<\t%zu\t%zu", tokens.ptr[i].start, tokens.ptr[i].end);
@@ -208,6 +272,9 @@ void print_tokens(const TokenDa tokens) {
                 break;
         }
     }
+}
+
+void parse(const TokenDa tokens) {
 }
 
 int main(void) {
