@@ -275,6 +275,12 @@ void print_tokens(const TokenDa tokens) {
 }
 
 void parse(const TokenDa tokens) {
+    size_t i = 0;
+    if (tokens.count == 0) {
+    }
+    if (tokens.count == 1) {
+
+    }
 }
 
 int main(void) {

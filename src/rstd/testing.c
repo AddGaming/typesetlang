@@ -3,6 +3,7 @@
 */
 #include <stdio.h>
 #include "testing.h"
+#include "rstd.h"
 
 // char
 // signed_char
