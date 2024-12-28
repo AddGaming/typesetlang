@@ -51,3 +51,6 @@ int peak(FILE* fp) {
     fsetpos(fp, &pos);
     return ans;
 }
+
+IMPL_SWAP(String)
+IMPL_DA(String)

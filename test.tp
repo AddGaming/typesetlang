@@ -14,7 +14,7 @@ fun g(x: i8) -> i8 where
 g(16) /* doesn't compile since it violates x < 10 */
 g(-2) /* doesn't compile since it violates x >= 0 */
 
-g(5) /* works */
+print(g(5)) /* works */
 
 /* handling constraints during runtime */
 fun h(x: i8) -> i8 {
@@ -44,7 +44,7 @@ fun did_overflow(x: i8, y: i8) -> i8 {
 unsave add(42, 69) + 1 
 
 /* but this does */
-z = unsave add(42, 69)
+z: i8 = unsave add(42, 69)
 if (z < 120) {
     z + 4
 } else {
@@ -60,7 +60,7 @@ struct Combine {
 /* this function doesn't compile since the valuerange */
 /* for x.x isn't constrained and could overflow */
 fun struct_manip(x: Combine) -> i8 {
-    x.x + 10  /*  */
+    x.x + 10  /* could be 127 + 10 */
 }
 
 /* constraints are evaluated from top to bottom */
