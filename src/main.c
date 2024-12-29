@@ -163,7 +163,7 @@ TokenDa tokenize(FILE* file, TokenState state, const size_t i) {
             state.acc = insert_TokenDa(&state.acc, new_tk).result;
         } 
         return state.acc;
-    } else if (c == ' ' || c == '\n' || c == '\r' || c == '\t') {
+    } else if (c == ' ' || c == '\r' || c == '\t') {
         if (state.buff.count > 0) {
             Token new_tk = name_or_keyword(state.buff, i);
             state.buff.count = 0;
@@ -428,30 +428,94 @@ typedef enum {
     I_ADD_ASS_U8, // | s | s | adds two u8 and assigns result to first one
     I_RADD_U8,    // | s | s | adds two u8 (index from last element)
     I_RADD_ASS_U8,// | s | s | adds two u8 and assigns result to first one
-    I_ASSIGN,     // | s | s | assigns from first arg to second arg
+    I_ASSIGN,     // | s | s | assigns from first  arg to second  arg
+    I_RASSIGN,    // | s | s | assigns from first -arg to second -arg
     I_POP_N,      // | s |   | pops n bytes of the stack
     I_PUSH_N,     // | s |   | pushes n bytes to the stack
-    I_JUMP,       // | i |   | jumps n instructions (negative = backwards)
-    I_CON_JUMP,   // | s | i | jumps if first element != 0
-    I_OUT_S,      // | s | i | prints a signed   value (with nl if i != 0)
-    I_OUT_U       // | s | i | prints a unsigned value (with nl if i != 0)
+    I_LOADC,      // | s | l | loads a constant l into index s
+    I_RLOADC,     // | s | l | loads a constant l into index -s 
+    I_JUMP,       // | l |   | jumps n instructions (negative = backwards)
+    I_CON_JUMP,   // | s | l | jumps if first element != 0
+    I_OUT_S,      // | s | l | prints a signed   value (with nl if l != 0)
+    I_OUT_U       // | s | l | prints a unsigned value (with nl if l != 0)
 } InstructionType;
 
 typedef struct {
     InstructionType type;
     union {
         struct {
-            int iix, iiy;
+            llong iix, iiy;
         };
         struct {
             size_t six;
-            int siy;
+            llong siy;
         };
         struct {
             size_t ssx, ssy;
         };
     };
 } Instruction;
+
+const Instruction PUSH_ONE = {I_PUSH_N, {{1, 0}}};
+
+void print_instruction(Instruction ins) {
+    switch (ins.type) {
+        case I_ADD_I8:
+            cyanln("I_ADD_I8\t%zu\t%zu", ins.ssx, ins.ssy);
+            break;
+        case I_ADD_ASS_I8:
+            cyanln("I_ADD_ASS_I8\t%zu\t%zu", ins.ssx, ins.ssy);
+            break;
+        case I_RADD_I8:
+            cyanln("I_RADD_I8\t%zu\t%zu", ins.ssx, ins.ssy);
+            break;
+        case I_RADD_ASS_I8:
+            cyanln("I_RADD_ASS_I8\t%zu\t%zu", ins.ssx, ins.ssy);
+            break;
+        case I_ADD_U8:
+            cyanln("I_ADD_U8\t%zu\t%zu", ins.ssx, ins.ssy);
+            break;
+        case I_ADD_ASS_U8:
+            cyanln("I_ADD_ASS_U8\t%zu\t%zu", ins.ssx, ins.ssy);
+            break;
+        case I_RADD_U8:
+            cyanln("I_RADD_U8\t%zu\t%zu", ins.ssx, ins.ssy);
+            break;
+        case I_RADD_ASS_U8:
+            cyanln("I_RADD_ASS_U8\t%zu\t%zu", ins.ssx, ins.ssy);
+            break;
+        case I_ASSIGN:
+            cyanln("I_ASSIGN\t%zu\t%zu", ins.ssx, ins.ssy);
+            break;
+        case I_RASSIGN:
+            cyanln("I_RASSIGN\t%zu\t%zu", ins.ssx, ins.ssy);
+            break;
+        case I_POP_N:
+            cyanln("I_POP_N\t\t%zu", ins.ssx);
+            break;
+        case I_PUSH_N:
+            cyanln("I_PUSH_N\t%zu", ins.ssx);
+            break;
+        case I_LOADC:
+            cyanln("I_LOADC\t%zu\t%lld", ins.ssx, ins.siy);
+            break;
+        case I_RLOADC:
+            cyanln("I_RLOADC\t%zu\t%lld", ins.ssx, ins.siy);
+            break;
+        case I_JUMP:
+            cyanln("I_JUMP\t%lld", ins.iix);
+            break;
+        case I_CON_JUMP:
+            cyanln("I_CON_JUMP\t%zu\t%lld", ins.six, ins.siy);
+            break;
+        case I_OUT_S:
+            cyanln("I_OUT_S\t%zu\t%lld", ins.six, ins.siy);
+            break;
+        case I_OUT_U:
+            cyanln("I_OUT_U\t%zu\t%lld", ins.six, ins.siy);
+            break;
+    }
+}
 
 DEFINE_RESULT(InstructionType);
 IMPL_SWAP    (InstructionType);
@@ -489,16 +553,15 @@ const ValRange I8_RANGE = {
 }; 
 const ValRange U8_RANGE = {
     .type = U8,
-    .sstart =    0,
-    .smin   =    0,
-    .smax   =  255,
-    .send   =  255,
+    .ustart =    0,
+    .umin   =    0,
+    .umax   =  255,
+    .uend   =  255,
 };
 
 #define MAX_NAME_LEN 255
 #define MAX_ARGC      32
-// max args for a func == 32
-// max name length == 255
+
 typedef struct {
     uchar         argc;
     uchar         unsave;
@@ -534,7 +597,7 @@ void load_name(char* buff, FILE* file, const Token* token) {
     for (size_t i = 0; i <= len; i++) {
         buff[i] = (uchar) fgetc(file);
     }
-    yellowln("parsed name @ %zu: %s", token->start, buff)
+    yellowln("parsed name @ %zu: \"%s\"", token->start, buff)
 }
 
 // tries to find a var by name.
@@ -552,7 +615,7 @@ size_t find_var(const Var* v, const VarDa* vars) {
 
 ValRange tk_to_val_range(const Token* type, FILE* file) {
     // TODO: stuct/enum handling missing
-    char name[MAX_NAME_LEN + 1];
+    char name[MAX_NAME_LEN + 1] = {0};
     load_name((char*) &name, file, type);
     if (       name[0] == 'i' && name[1] == '8') {
         return I8_RANGE;
@@ -645,11 +708,138 @@ char is_print(const size_t i, const TokenDa* tokens) {
     );
 }
 
+char is_literal(const TokenDa* token_buff, const char* name) {
+    if (token_buff->count && token_buff->ptr[token_buff->count-1].type == T_NAME) {
+        for (size_t i = 0; name[i] != 0; i++) {
+            if (name[i] < '0' || name[i] > '9') { return 0; }
+        }
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+llong get_literal(const char* name) {
+    llong x = 0;
+    for (size_t i = 0; name[i] != 0; i++) {
+        x *= 10;
+        x += name[i] - '0';
+        if (i > 18) {
+            redln("ERROR: The provided litaral is too long! (max character count = 18)");
+            redln("\"%s\"", name);
+            exit(1);
+        }
+    }
+    return x;
+}
+
+char is_var(const TokenDa* token_buff, const char* name) {
+    if (token_buff->count && token_buff->ptr[token_buff->count-1].type == T_NAME) {
+        if (name[0] < 'A' || name[0] > 'z') { return 0; }
+        for (size_t i = 1; name[i] != 0; i++) {
+            if (name[i] < '0' || name[i] > 'z') { return 0; }
+        }
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+// accepts tokens in reverse order that da works as stack
+void parse_statement(
+    const FuncDa*  funcs,
+    const VarDa*   vars,
+    InstructionDa* ins,
+    TokenDa*       token_buff,
+    FILE*          file
+) {
+    yellowln("parse Statement");
+    print_tokens(*token_buff);
+    // create temp value to calc into
+    Instruction push_res = {0};
+    push_res.type = I_PUSH_N;
+    push_res.ssx  = 1;
+    *ins = insert_InstructionDa(ins, push_res).result;
+    print_instruction(push_res);
+    size_t allocs = 0;
+
+    while (token_buff->count) {
+        // TODO: change to only parse name once and pass that into is_var and is_literal
+        char name[MAX_NAME_LEN + 1] = {0};
+        load_name(name, file, token_buff->ptr + token_buff->count - 1);
+
+        // precedents highest 
+        // if fn call  -> parse fn call
+        // if ()       -> parse inner statement
+        // if []       -> create array
+        // if {}       -> create set
+        // precedents ...
+        // if ..       -> parse range IF in create
+        // precedents ...
+        // if */@#$    -> 
+        // precedents lowest 
+        // if +-       -> 
+        if (     token_buff->ptr[token_buff->count-1].type == T_ADD) {
+            token_buff->count -= 1;
+            parse_statement(funcs, vars, ins, token_buff, file);
+
+            Instruction radd = {};
+            radd.type = I_RADD_I8;
+            radd.ssx  = 1;
+            radd.ssy  = 2;
+            *ins = insert_InstructionDa(ins, radd).result;
+            print_instruction(radd);
+            allocs += 1;
+        }
+        else if (token_buff->ptr[token_buff->count-1].type == T_SUB) {
+            redln("TODO: sub");
+            exit(1);
+        }
+        // if var      -> load from stack
+        else if (is_var(token_buff, (char*) name)) {
+            redln("TODO: var");
+            exit(1);
+        }
+        // if constant -> put on stack
+        else if (is_literal(token_buff, (char*) name)) {
+            Instruction loadr = {};
+            *ins = insert_InstructionDa(ins, PUSH_ONE).result;
+            print_instruction(PUSH_ONE);
+            allocs += 1;
+            llong c = get_literal((char*) name);
+            loadr.type = I_RLOADC;
+            loadr.six  = 1;
+            loadr.siy  = c;
+            *ins = insert_InstructionDa(ins, loadr).result;
+            print_instruction(loadr);
+            token_buff->count -= 1;
+        } else {
+            // crash with invalid token
+            redln("ERROR: Malformed file around %zu!", token_buff->ptr[token_buff->count-1].start);
+            redln("Unexpected Token!");
+            exit(1);
+        }
+    }
+    // TODO: unroll statement stack space (RASS, POPN)
+    Instruction rass = {0};
+    rass.type = I_RASSIGN;
+    rass.ssx  = 1;
+    rass.ssy  = 1+allocs;
+    *ins = insert_InstructionDa(ins, rass).result;
+    print_instruction(rass);
+    Instruction popn = {0};
+    popn.type = I_POP_N;
+    popn.ssx  = allocs;
+    *ins = insert_InstructionDa(ins, popn).result;
+    print_instruction(popn);
+}
+
 InstructionDa parse(const TokenDa* tokens, FILE* file) {
     size_t i = 0;
-    InstructionDa ins   = new_InstructionDa(8).result;
-    FuncDa        funcs = new_FuncDa       (8).result;
-    VarDa         vars  = new_VarDa        (8).result;
+    InstructionDa ins      = new_InstructionDa(8).result;
+    FuncDa        funcs    = new_FuncDa       (8).result;
+    VarDa         vars     = new_VarDa        (8).result;
+    TokenDa       tk_buff  = new_TokenDa      (8).result;
 
     if (tokens->count == 0) {
         redln("ERROR: The input file in empty!");
@@ -658,6 +848,7 @@ InstructionDa parse(const TokenDa* tokens, FILE* file) {
     while (i <= tokens->count) {
         if (       tokens->ptr[i].type == T_OC) {
             i = skip_comment(i, tokens);
+
         } else if (is_fun_decl(i, tokens)) {
             // TODO:
             // parse args
@@ -665,9 +856,11 @@ InstructionDa parse(const TokenDa* tokens, FILE* file) {
             // parse where
             // parse body 
             i += 1;
+
         } else if (is_unsave_fun_decl(i, tokens)) {
             // TODO:
             i += 1;
+
         } else if (is_var_ass(i, tokens)) {
             Var this = load_var(
                 tokens->ptr + i, tokens->ptr + i + 2, file
@@ -679,27 +872,63 @@ InstructionDa parse(const TokenDa* tokens, FILE* file) {
                 in.type = I_PUSH_N;
                 in.ssx  = 1;
                 ins  = insert_InstructionDa(&ins,  in  ).result;
+                print_instruction(in);
                 vars = insert_VarDa        (&vars, this).result;
             } else { // found
                 this = vars.ptr[this.i];
             }
+            yellowln(
+                "var\t%s of [\t%lld;\t%lld;\t%lld;\t%lld] @ %zu", this.name, 
+                this.range.sstart, this.range.smin,
+                this.range.smax,   this.range.send,
+                this.i
+            );
             // TODO: parse statement into this
-            i += 1;
+            tk_buff.count = 0;
+            i += 4; // name : name =
+            while (tokens->ptr[i].type != T_NL) { 
+                if (i >= tokens->count) {
+                    redln("WTF: the statement ended without a new line!");
+                    exit(1);
+                }
+                tk_buff = insert_TokenDa(&tk_buff, tokens->ptr[i]).result;
+                i += 1;
+            }
+            reverse_TokenDa(tk_buff);
+            parse_statement(&funcs, &vars, &ins, &tk_buff, file);
+            Instruction rass = {0};
+            rass.type = I_RASSIGN;
+            rass.ssx  = 1;
+            rass.ssy  = 2;
+            ins = insert_InstructionDa(&ins, rass).result;
+            print_instruction(rass);
+            Instruction popn = {0};
+            popn.type = I_POP_N;
+            popn.ssx  = 1;
+            ins = insert_InstructionDa(&ins, popn).result;
+            print_instruction(popn);
+
         } else if (is_func_call(i, tokens)) {
             // TODO:
             i += 1;
+
         } else if (is_unsave_func_call(i, tokens)) {
             // TODO:
             i += 1;
+
         } else if (is_statement(i, tokens)) {
             // WARNING: statements match eagerly 
             // and need to be bollow func and var
             // I dont have side effects, so can be ignored :)
             while (tokens->ptr[i].type != T_NL && i < tokens->count) { i += 1; }
             i += 1; // skip NL
+
         } else if (is_print(i, tokens)) {
             // TODO:
             i += 1;
+
+        } else if (tokens->ptr[i].type == T_NL) {
+            i += 1; // skip whitespace
         } else {
             redln("ERROR: Malformed file around %zu!", tokens->ptr[i].start);
             redln("Allowed top level actions are function declaration,");
@@ -710,6 +939,15 @@ InstructionDa parse(const TokenDa* tokens, FILE* file) {
     return ins;
 }
 
+typedef struct {
+    char     name[MAX_NAME_LEN + 1];
+    size_t   i;
+} IVar;
+DEFINE_RESULT(IVar);
+IMPL_SWAP    (IVar);
+DEFINE_DA    (IVar);
+IMPL_DA      (IVar);
+
 void eval(const InstructionDa* ins) {
     charDa stack = new_charDa(8).result;
 
@@ -718,7 +956,7 @@ void eval(const InstructionDa* ins) {
 
 int main(void) {
     whiteln("---------------------------");
-    FILE* file = fopen("tests/test.tp", "r");
+    FILE* file = fopen("tests/assignment.tp", "r");
     
     TokenState state = { new_charDa(8).result, new_TokenDa(8).result };
     TokenDa tokens = tokenize(
