@@ -10,6 +10,7 @@ typedef enum {
     T_UNSAVE,
     T_WHERE,
     T_PRINT,
+    T_ENUM,
     T_NAME,
     T_ARROW,
     T_OPAR,
@@ -20,10 +21,16 @@ typedef enum {
     T_SUB,
     T_MUL,
     T_DIV,
+    T_MOD,
+    T_ISET,
+    T_OSET,
+    T_CONCAT,
     T_DOT,
+    T_DOTDOT,
     T_LT,
     T_GT,
     T_EQ,
+    T_EQEQ,
     T_LTE,
     T_GTE,
     T_OR,
@@ -32,6 +39,8 @@ typedef enum {
     T_BAND,
     T_OBRACE,
     T_CBRACE,
+    T_OBRACK,
+    T_CBRACK,
     T_NL,
     T_OC,
     T_CC
@@ -93,6 +102,13 @@ Token name_or_keyword(const charDa buff, const size_t i) {
         && buff.ptr[4] == 'e' 
     ) {
         tk.type = T_WHERE ;
+    } else if (buff.count == 4 
+        && buff.ptr[0] == 'e' 
+        && buff.ptr[1] == 'n' 
+        && buff.ptr[2] == 'u' 
+        && buff.ptr[3] == 'm' 
+    ) {
+        tk.type = T_ENUM  ;
     } else if (buff.count == 5 
         && buff.ptr[0] == 'p' 
         && buff.ptr[1] == 'r' 
@@ -168,9 +184,6 @@ TokenDa tokenize(FILE* file, TokenState state, const size_t i) {
     } else if (c == ';') {
         state = single_char_tk(T_SCOL, state, i);
         return tokenize(file, state, i+1);
-    } else if (c == '.') {
-        state = single_char_tk(T_DOT, state, i);
-        return tokenize(file, state, i+1);
     } else if (c == '\n') {
         state = single_char_tk(T_NL, state, i);
         return tokenize(file, state, i+1);
@@ -180,17 +193,30 @@ TokenDa tokenize(FILE* file, TokenState state, const size_t i) {
     } else if (c == '}') {
         state = single_char_tk(T_CBRACE, state, i);
         return tokenize(file, state, i+1);
-    } else if (c == '+') {
-        state = single_char_tk(T_ADD, state, i);
+    } else if (c == '[') {
+        state = single_char_tk(T_OBRACK, state, i);
+        return tokenize(file, state, i+1);
+    } else if (c == ']') {
+        state = single_char_tk(T_CBRACK, state, i);
         return tokenize(file, state, i+1);
     } else if (c == '+') {
         state = single_char_tk(T_ADD, state, i);
         return tokenize(file, state, i+1);
-    } else if (c == '=') {
-        state = single_char_tk(T_EQ, state, i);
+    } else if (c == '%') {
+        state = single_char_tk(T_MOD, state, i);
+        return tokenize(file, state, i+1);
+    } else if (c == '#') {
+        state = single_char_tk(T_ISET, state, i);
+        return tokenize(file, state, i+1);
+    } else if (c == '$') {
+        state = single_char_tk(T_OSET, state, i);
+        return tokenize(file, state, i+1);
+    } else if (c == '@') {
+        state = single_char_tk(T_CONCAT, state, i);
         return tokenize(file, state, i+1);
     } else if (
-        c == '<' || c == '>' || c == '-' || c == '*' || c == '/' || c == '&' || c == '|'
+           c == '<' || c == '>' || c == '-' || c == '*' || c == '/' || c == '&' 
+        || c == '|' || c == '=' || c == '.'
     ) {
         int d = peak(file);
         // Matches
@@ -200,6 +226,10 @@ TokenDa tokenize(FILE* file, TokenState state, const size_t i) {
             return tokenize(file, state, i+1);
         } else if (c == '>' && d == '=') {
             state = double_char_tk(T_GTE, state, i);
+            fseek(file, 1, SEEK_CUR);
+            return tokenize(file, state, i+1);
+        } else if (c == '=' && d == '=') {
+            state = double_char_tk(T_EQEQ, state, i);
             fseek(file, 1, SEEK_CUR);
             return tokenize(file, state, i+1);
         } else if (c == '-' && d == '>') {
@@ -218,11 +248,21 @@ TokenDa tokenize(FILE* file, TokenState state, const size_t i) {
             state = double_char_tk(T_OR, state, i);
             fseek(file, 1, SEEK_CUR);
             return tokenize(file, state, i+1);
+        } else if (c == '.' && d == '.') {
+            state = double_char_tk(T_DOTDOT, state, i);
+            fseek(file, 1, SEEK_CUR);
+            return tokenize(file, state, i+1);
         } else if (c == '*' && d == '/') {
             state = double_char_tk(T_CC, state, i);
             fseek(file, 1, SEEK_CUR);
             return tokenize(file, state, i+1);
         // Doesnt match
+        } else if (c == '.' && d != '.') {
+            state = single_char_tk(T_DOT, state, i);
+            return tokenize(file, state, i+1);
+        } else if (c == '=' && d != '=') {
+            state = single_char_tk(T_EQ, state, i);
+            return tokenize(file, state, i+1);
         } else if (c == '<' && d != '=') {
             state = single_char_tk(T_LT, state, i);
             return tokenize(file, state, i);
@@ -273,6 +313,9 @@ void print_tokens(const TokenDa tokens) {
             case T_PRINT:
                 yellowln("print\t%zu\t%zu", tokens.ptr[i].start, tokens.ptr[i].end);
                 break;
+            case T_ENUM:
+                yellowln("enum\t%zu\t%zu", tokens.ptr[i].start, tokens.ptr[i].end);
+                break;
             case T_NAME:
                 yellowln("<name>\t%zu\t%zu", tokens.ptr[i].start, tokens.ptr[i].end);
                 break;
@@ -294,6 +337,9 @@ void print_tokens(const TokenDa tokens) {
             case T_DOT:
                 yellowln(".\t%zu\t%zu", tokens.ptr[i].start, tokens.ptr[i].end);
                 break;
+            case T_DOTDOT:
+                yellowln("..\t%zu\t%zu", tokens.ptr[i].start, tokens.ptr[i].end);
+                break;
             case T_NL:
                 yellowln("NL\t%zu\t%zu", tokens.ptr[i].start, tokens.ptr[i].end);
                 break;
@@ -309,6 +355,18 @@ void print_tokens(const TokenDa tokens) {
             case T_MUL:
                 yellowln("*\t%zu\t%zu", tokens.ptr[i].start, tokens.ptr[i].end);
                 break;
+            case T_MOD:
+                yellowln("%c\t%zu\t%zu", '%', tokens.ptr[i].start, tokens.ptr[i].end);
+                break;
+            case T_ISET:
+                yellowln("#\t%zu\t%zu", tokens.ptr[i].start, tokens.ptr[i].end);
+                break;
+            case T_OSET:
+                yellowln("$\t%zu\t%zu", tokens.ptr[i].start, tokens.ptr[i].end);
+                break;
+            case T_CONCAT:
+                yellowln("@\t%zu\t%zu", tokens.ptr[i].start, tokens.ptr[i].end);
+                break;
             case T_LT:
                 yellowln("<\t%zu\t%zu", tokens.ptr[i].start, tokens.ptr[i].end);
                 break;
@@ -317,6 +375,9 @@ void print_tokens(const TokenDa tokens) {
                 break;
             case T_EQ:
                 yellowln("=\t%zu\t%zu", tokens.ptr[i].start, tokens.ptr[i].end);
+                break;
+            case T_EQEQ:
+                yellowln("==\t%zu\t%zu", tokens.ptr[i].start, tokens.ptr[i].end);
                 break;
             case T_LTE:
                 yellowln("<=\t%zu\t%zu", tokens.ptr[i].start, tokens.ptr[i].end);
@@ -342,6 +403,12 @@ void print_tokens(const TokenDa tokens) {
             case T_CBRACE:
                 yellowln("}\t%zu\t%zu", tokens.ptr[i].start, tokens.ptr[i].end);
                 break;
+            case T_OBRACK:
+                yellowln("[\t%zu\t%zu", tokens.ptr[i].start, tokens.ptr[i].end);
+                break;
+            case T_CBRACK:
+                yellowln("]\t%zu\t%zu", tokens.ptr[i].start, tokens.ptr[i].end);
+                break;
             case T_OC:
                 yellowln("/*\t%zu\t%zu", tokens.ptr[i].start, tokens.ptr[i].end);
                 break;
@@ -362,7 +429,8 @@ typedef enum {
     I_RADD_U8,    // | s | s | adds two u8 (index from last element)
     I_RADD_ASS_U8,// | s | s | adds two u8 and assigns result to first one
     I_ASSIGN,     // | s | s | assigns from first arg to second arg
-    I_POP_N,      // | s | s | pops n bytes of the stack
+    I_POP_N,      // | s |   | pops n bytes of the stack
+    I_PUSH_N,     // | s |   | pushes n bytes to the stack
     I_JUMP,       // | i |   | jumps n instructions (negative = backwards)
     I_CON_JUMP,   // | s | i | jumps if first element != 0
     I_OUT_S,      // | s | i | prints a signed   value (with nl if i != 0)
@@ -436,13 +504,15 @@ typedef struct {
     uchar         unsave;
     char          name[MAX_NAME_LEN + 1];
     InstructionDa ins;
-    ValRange      ranges[MAX_ARGC];
+    ValRange      in_ranges[MAX_ARGC];
+    ValRange      out_range;
 } Func;
 
 // max name length == 255
 typedef struct {
     char     name[MAX_NAME_LEN + 1];
     ValRange range;
+    size_t   i;
 } Var;
 
 DEFINE_RESULT(Func);
@@ -454,6 +524,127 @@ IMPL_SWAP    (Var);
 DEFINE_DA    (Var);
 IMPL_DA      (Var);
 
+void load_name(char* buff, FILE* file, const Token* token) {
+    const size_t len = token->end - token->start;
+    if (len >= MAX_NAME_LEN) {
+        redln("ERROR: The name @ %zu is too long!", token->start);
+        exit(1);
+    }
+    fseek(file, token->start, SEEK_SET);
+    for (size_t i = 0; i <= len; i++) {
+        buff[i] = (uchar) fgetc(file);
+    }
+    yellowln("parsed name @ %zu: %s", token->start, buff)
+}
+
+// tries to find a var by name.
+// if fails, return SIZE_MAX.
+size_t find_var(const Var* v, const VarDa* vars) {
+    for (size_t i = 0; i <= vars->count; i++) {
+        const Var* o = vars->ptr + i;
+        if (0 == memcmp(v->name, o->name, MAX_NAME_LEN)) {
+            return i;
+        }
+    }
+
+    return SIZE_MAX;
+}
+
+ValRange tk_to_val_range(const Token* type, FILE* file) {
+    // TODO: stuct/enum handling missing
+    char name[MAX_NAME_LEN + 1];
+    load_name((char*) &name, file, type);
+    if (       name[0] == 'i' && name[1] == '8') {
+        return I8_RANGE;
+    } else if (name[0] == '8' && name[1] == '8') {
+        return I8_RANGE;
+    } else {
+        redln("ERROR: unsupported type %s!", name);
+        exit(1);
+    }
+}
+
+Var load_var(const Token* name, const Token* type, FILE* file) {
+    Var temp = {0};
+    load_name(temp.name, file, name);
+    temp.range = tk_to_val_range(type, file);
+    return temp;
+}
+
+// returns new position in token stream
+size_t skip_comment(size_t i, const TokenDa* tokens) {
+    size_t c_start = tokens->ptr[i].start; 
+    while (tokens->ptr[i].type != T_CC && i < tokens->count) { i += 1; }
+    if (i == tokens->count && tokens->ptr[i].type != T_CC) {
+        redln("ERROR: Comment starting @ %zu is not closed!", c_start);
+        exit(1);
+    } else {
+        return i + 1;
+    }
+}
+
+char is_fun_decl(const size_t i, const TokenDa* tokens) {
+    return (
+           tokens->count - i >= 3
+        && tokens->ptr[i+0].type == T_FUN
+        && tokens->ptr[i+1].type == T_NAME
+        && tokens->ptr[i+2].type == T_OPAR
+    );
+}
+
+char is_unsave_fun_decl(const size_t i, const TokenDa* tokens) {
+    return (
+           tokens->count - i >= 4
+        && tokens->ptr[i+0].type == T_UNSAVE
+        && tokens->ptr[i+1].type == T_FUN
+        && tokens->ptr[i+2].type == T_NAME
+        && tokens->ptr[i+3].type == T_OPAR
+    );
+}
+
+char is_var_ass(const size_t i, const TokenDa* tokens) {
+    return (
+           tokens->count - i >= 5
+        && tokens->ptr[i+0].type == T_NAME
+        && tokens->ptr[i+1].type == T_COL
+        && tokens->ptr[i+2].type == T_NAME
+        && tokens->ptr[i+3].type == T_EQ
+    );
+}
+
+char is_func_call(const size_t i, const TokenDa* tokens) {
+    return (
+           tokens->count - i >= 3
+        && tokens->ptr[i+0].type == T_NAME
+        && tokens->ptr[i+1].type == T_OPAR
+    );
+}
+
+char is_unsave_func_call(const size_t i, const TokenDa* tokens) {
+    return (
+           tokens->count - i >= 4
+        && tokens->ptr[i+0].type == T_UNSAVE
+        && tokens->ptr[i+1].type == T_NAME
+        && tokens->ptr[i+2].type == T_OPAR
+    );
+}
+
+char is_statement(const size_t i, const TokenDa* tokens) {
+    return (
+           tokens->count - i >= 1
+        && tokens->ptr[i+0].type == T_NAME
+    );
+}
+
+char is_print(const size_t i, const TokenDa* tokens) {
+    return (
+           tokens->count - i >= 3
+        && tokens->ptr[i+0].type == T_PRINT
+        && tokens->ptr[i+1].type == T_OPAR
+        && tokens->ptr[i+2].type == T_NAME
+    );
+}
+
 InstructionDa parse(const TokenDa* tokens, FILE* file) {
     size_t i = 0;
     InstructionDa ins   = new_InstructionDa(8).result;
@@ -462,95 +653,54 @@ InstructionDa parse(const TokenDa* tokens, FILE* file) {
 
     if (tokens->count == 0) {
         redln("ERROR: The input file in empty!");
-        return ins;
+        exit(1);
     }
     while (i <= tokens->count) {
         if (       tokens->ptr[i].type == T_OC) {
-            size_t c_start = tokens->ptr[i].start; 
-            while (tokens->ptr[i].type != T_CC && i < tokens->count) { i += 1; }
-            if (i == tokens->count && tokens->ptr[i].type != T_CC) {
-                redln("ERROR: Comment starting @ %zu is not closed!", c_start);
-                exit(1);
-            } else {
-                i += 1;
+            i = skip_comment(i, tokens);
+        } else if (is_fun_decl(i, tokens)) {
+            // TODO:
+            // parse args
+            // parse result type
+            // parse where
+            // parse body 
+            i += 1;
+        } else if (is_unsave_fun_decl(i, tokens)) {
+            // TODO:
+            i += 1;
+        } else if (is_var_ass(i, tokens)) {
+            Var this = load_var(
+                tokens->ptr + i, tokens->ptr + i + 2, file
+            );
+            this.i = find_var(&this, &vars);
+            if (this.i == SIZE_MAX) { // not found
+                this.i = ins.count;
+                Instruction in = {0};
+                in.type = I_PUSH_N;
+                in.ssx  = 1;
+                ins  = insert_InstructionDa(&ins,  in  ).result;
+                vars = insert_VarDa        (&vars, this).result;
+            } else { // found
+                this = vars.ptr[this.i];
             }
-        } else if (tokens->ptr[i].type == T_FUN) {
-            if (tokens->count - i >= 3
-                && tokens->ptr[i+1].type == T_NAME
-                && tokens->ptr[i+2].type == T_OPAR
-            ) {
-                // TODO:
-                // parse args
-                // parse result type
-                // parse where
-                // parse body 
-                i += 1;
-            } else { 
-                redln("ERROR: syntax error @ %zu.", tokens->ptr[i].start);
-                redln("Unexpected Keyword 'fun'!");
-                redln("Allowed top level actions are function declaration,");
-                redln("function invocation, variable assignment, and comments");
-                exit(1);
-            }
-        } else if (tokens->ptr[i].type == T_NAME) {
-            // var assignment
-            if (tokens->count - i >= 5
-                && tokens->ptr[i+1].type == T_COL
-                && tokens->ptr[i+2].type == T_NAME
-                && tokens->ptr[i+3].type == T_EQ
-            ) {
-                // TODO:
-                i += 1;
-            // func call
-            } else if (tokens->count - i >= 3
-                && tokens->ptr[i+1].type == T_OPAR
-            ) { 
-                // TODO:
-                i += 1;
+            // TODO: parse statement into this
+            i += 1;
+        } else if (is_func_call(i, tokens)) {
+            // TODO:
+            i += 1;
+        } else if (is_unsave_func_call(i, tokens)) {
+            // TODO:
+            i += 1;
+        } else if (is_statement(i, tokens)) {
+            // WARNING: statements match eagerly 
+            // and need to be bollow func and var
             // I dont have side effects, so can be ignored :)
-            } else { 
-                while (tokens->ptr[i].type != T_NL && i < tokens->count) { i += 1; }
-                i += 1; // skip NL
-            }
-        } else if (tokens->ptr[i].type == T_UNSAVE) {
-            // unsave func call
-            if (tokens->count - i >= 5
-                && tokens->ptr[i+1].type == T_NAME
-                && tokens->ptr[i+2].type == T_OPAR
-            ) {
-                // TODO:
-                i += 1;
-            // unsave func decl
-            } else if (tokens->count - i >= 3
-                && tokens->ptr[i+1].type == T_FUN
-                && tokens->ptr[i+2].type == T_NAME
-                && tokens->ptr[i+3].type == T_OPAR
-            ) { 
-                // TODO:
-                i += 1;
-            } else { 
-                redln("ERROR: syntax error @ %zu.", tokens->ptr[i].start);
-                redln("Unexpected Keyword 'unsave'!");
-                redln("'unsave' needs to be followed by either a function declaration");
-                redln("or function invocation.");
-                exit(1);
-            }
-        } else if (tokens->ptr[i].type == T_PRINT) {
-            if (tokens->count - i >= 5
-                && tokens->ptr[i+2].type == T_OPAR
-                && tokens->ptr[i+2].type == T_NAME
-            ) {
-                // TODO:
-                i += 1;
-            } else { 
-                redln("ERROR: syntax error @ %zu.", tokens->ptr[i].start);
-                redln("print gets used like a function:");
-                redln("\tprint(var)");
-                redln("\tprint(a, b, c)");
-                exit(1);
-            }
+            while (tokens->ptr[i].type != T_NL && i < tokens->count) { i += 1; }
+            i += 1; // skip NL
+        } else if (is_print(i, tokens)) {
+            // TODO:
+            i += 1;
         } else {
-            size_t c_start = tokens->ptr[i].start; 
             redln("ERROR: Malformed file around %zu!", tokens->ptr[i].start);
             redln("Allowed top level actions are function declaration,");
             redln("function invocation, variable assignment, and comments");
@@ -568,7 +718,7 @@ void eval(const InstructionDa* ins) {
 
 int main(void) {
     whiteln("---------------------------");
-    FILE* file = fopen("test.tp", "r");
+    FILE* file = fopen("tests/test.tp", "r");
     
     TokenState state = { new_charDa(8).result, new_TokenDa(8).result };
     TokenDa tokens = tokenize(

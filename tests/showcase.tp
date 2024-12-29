@@ -1,0 +1,110 @@
+/* this function doesn't compile beacuse it can overflow */
+fun f(x: i8) -> i8 {
+    x + 5
+}
+
+/* this function can't overflow */
+fun g(x: i8) -> i8 where 
+    x < 10; 
+    x >= 0 
+{
+    x + 5
+}
+
+g(16) /* doesn't compile since it violates x < 10 */
+g(-2) /* doesn't compile since it violates x >= 0 */
+
+print(g(5)) /* works */
+
+/* handling constraints during runtime */
+fun h(x: i8) -> i8 {
+    if (x < 10) { /* value gets constraint here */
+        x + 5     /* can't overflow */
+    } else {      /* handles all cases where x >= 10 */
+        0
+    }
+}
+
+/* unsave keyword disables bounds-checks */
+unsave fun add(x: i8, y: i8) {
+    x + y  /* allowed since unsave */
+}
+
+/* unsave functions get called with unsave keyword */
+unsave add(127, 127)
+
+/* or in functions */
+fun did_overflow(x: i8, y: i8) -> i8 {
+    z = unsave add(x, y) /* dangerous */
+    if ( z < x || z < y ) { 1 } else { 0 } /* save again */
+}
+
+/* but you can't make assumptions about unsave except type */
+/* doesn't compile since i8 is not constraint enough */ 
+unsave add(42, 69) + 1 
+
+/* but this does */
+z: i8 = unsave add(42, 69)
+if (z < 120) {
+    z + 4
+} else {
+    z
+}
+
+/* structs are just combine value spaces */
+struct Combine {
+    x: i8;
+    y: i8;
+}
+
+/* this function doesn't compile since the valuerange */
+/* for x.x isn't constrained and could overflow */
+fun struct_manip(x: Combine) -> i8 {
+    x.x + 10  /* could be 127 + 10 */
+}
+
+/* constraints are evaluated from top to bottom */
+fun struct_manip(x: Combine) -> i8 where 
+    x.x < 128; /* (1) constraints x.x */
+    x.x > x.y; /* (2) constraints in terms of x.y */
+    x.x + x.y < 100; /* (3) constraints using x.x & x.y */
+{
+    /* assuming no advanced compile time analysis */
+    /* leading to both branches getting checked   */
+    if (0) {     
+    /* this works since x.x is <= 100 (3) */
+        x.x + 10 
+    } else {
+    /* this works since (1) & (2) imply that x.y < x.x < 128 */
+        x.y + 1  
+    }
+}
+
+enum MyChoice {
+    ZERO;
+    ONE;
+    TWO;
+    THREE;
+}
+
+/* accepts a set of One and Two */
+fun one_or_two(x: MyChoice) -> MyChoice where 
+    x in {MyChoice.ONE, MyChoice.TWO};
+{
+    x
+}
+
+/* constructs a set through concat operator */
+fun two_or_three(x: MyChoice) -> MyChoice where 
+    x in {MyChoice.TWO} @ {MyChoice.THREE};
+{
+    x
+}
+
+/* constructs a more complex set
+   through concat operator and a range */
+fun complex_combination(x: MyChoice) -> MyChoice where 
+    x in {MyChoice.TWO} @ {20..30};
+{
+    x
+}
