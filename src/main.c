@@ -265,25 +265,25 @@ TokenDa tokenize(FILE* file, TokenState state, const size_t i) {
             return tokenize(file, state, i+1);
         } else if (c == '<' && d != '=') {
             state = single_char_tk(T_LT, state, i);
-            return tokenize(file, state, i);
+            return tokenize(file, state, i+1);
         } else if (c == '>' && d != '=') {
             state = single_char_tk(T_GT, state, i);
-            return tokenize(file, state, i);
+            return tokenize(file, state, i+1);
         } else if (c == '-' && d != '>') {
             state = single_char_tk(T_SUB, state, i);
-            return tokenize(file, state, i);
+            return tokenize(file, state, i+1);
         } else if (c == '/' && d != '*') {
             state = single_char_tk(T_DIV, state, i);
-            return tokenize(file, state, i);
+            return tokenize(file, state, i+1);
         } else if (c == '*' && d != '/') {
             state = single_char_tk(T_MUL, state, i);
-            return tokenize(file, state, i);
+            return tokenize(file, state, i+1);
         } else if (c == '&' && d != '&') {
             state = single_char_tk(T_BAND, state, i);
-            return tokenize(file, state, i);
+            return tokenize(file, state, i+1);
         } else if (c == '|' && d != '|') {
             state = single_char_tk(T_BOR, state, i);
-            return tokenize(file, state, i);
+            return tokenize(file, state, i+1);
         } else {
             // UNREACHABLE
             err_redln("UNREACHABLE TOKENIZATION STATE!")
@@ -421,13 +421,13 @@ void print_tokens(const TokenDa tokens) {
 
 typedef enum {
     I_ADD_I8,     // | s | s | adds two i8 (index from 0)
-    I_ADD_ASS_I8, // | s | s | adds two i8 and assigns result to first one
     I_RADD_I8,    // | s | s | adds two i8 (index from last element)
-    I_RADD_ASS_I8,// | s | s | adds two i8 and assigns result to first one
     I_ADD_U8,     // | s | s | adds two u8 (index from 0)
-    I_ADD_ASS_U8, // | s | s | adds two u8 and assigns result to first one
     I_RADD_U8,    // | s | s | adds two u8 (index from last element)
-    I_RADD_ASS_U8,// | s | s | adds two u8 and assigns result to first one
+    I_SUB_I8,     // | s | s | subtracts two i8 (index from 0)
+    I_RSUB_I8,    // | s | s | subtracts two i8 (index from last element)
+    I_SUB_U8,     // | s | s | subtracts two u8 (index from 0)
+    I_RSUB_U8,    // | s | s | subtracts two u8 (index from last element)
     I_ASSIGN,     // | s | s | assigns from first  arg to second  arg
     I_RASSIGN,    // | s | s | assigns from first -arg to second -arg
     I_POP_N,      // | s |   | pops n bytes of the stack
@@ -463,26 +463,26 @@ void print_instruction(Instruction ins) {
         case I_ADD_I8:
             cyanln("I_ADD_I8\t%zu\t%zu", ins.ssx, ins.ssy);
             break;
-        case I_ADD_ASS_I8:
-            cyanln("I_ADD_ASS_I8\t%zu\t%zu", ins.ssx, ins.ssy);
-            break;
         case I_RADD_I8:
             cyanln("I_RADD_I8\t%zu\t%zu", ins.ssx, ins.ssy);
-            break;
-        case I_RADD_ASS_I8:
-            cyanln("I_RADD_ASS_I8\t%zu\t%zu", ins.ssx, ins.ssy);
             break;
         case I_ADD_U8:
             cyanln("I_ADD_U8\t%zu\t%zu", ins.ssx, ins.ssy);
             break;
-        case I_ADD_ASS_U8:
-            cyanln("I_ADD_ASS_U8\t%zu\t%zu", ins.ssx, ins.ssy);
-            break;
         case I_RADD_U8:
             cyanln("I_RADD_U8\t%zu\t%zu", ins.ssx, ins.ssy);
             break;
-        case I_RADD_ASS_U8:
-            cyanln("I_RADD_ASS_U8\t%zu\t%zu", ins.ssx, ins.ssy);
+        case I_SUB_I8:
+            cyanln("I_SUB_I8\t%zu\t%zu", ins.ssx, ins.ssy);
+            break;
+        case I_RSUB_I8:
+            cyanln("I_RSUB_I8\t%zu\t%zu", ins.ssx, ins.ssy);
+            break;
+        case I_SUB_U8:
+            cyanln("I_SUB_U8\t%zu\t%zu", ins.ssx, ins.ssy);
+            break;
+        case I_RSUB_U8:
+            cyanln("I_RSUB_U8\t%zu\t%zu", ins.ssx, ins.ssy);
             break;
         case I_ASSIGN:
             cyanln("I_ASSIGN\t%zu\t%zu", ins.ssx, ins.ssy);
@@ -745,6 +745,15 @@ char is_var(const TokenDa* token_buff, const char* name) {
     }
 }
 
+char is_const_computeable(
+    const FuncDa*  funcs,
+    const VarDa*   vars,
+    const TokenDa* token_buff,
+    FILE*          file
+) {
+    return 0;
+}
+
 // accepts tokens in reverse order that da works as stack
 void parse_statement(
     const FuncDa*  funcs,
@@ -792,11 +801,25 @@ void parse_statement(
             allocs += 1;
         }
         else if (token_buff->ptr[token_buff->count-1].type == T_SUB) {
-            redln("TODO: sub");
-            exit(1);
+            token_buff->count -= 1;
+            parse_statement(funcs, vars, ins, token_buff, file);
+
+            Instruction radd = {};
+            radd.type = I_RSUB_I8;
+            radd.ssx  = 1;
+            radd.ssy  = 2;
+            *ins = insert_InstructionDa(ins, radd).result;
+            print_instruction(radd);
+            allocs += 1;
         }
         // if var      -> load from stack
         else if (is_var(token_buff, (char*) name)) {
+            *ins = insert_InstructionDa(ins, PUSH_ONE).result;
+            print_instruction(PUSH_ONE);
+            Instruction loadr = {};
+            loadr.type = I_RLOADC;
+            loadr.six  = 1;
+            loadr.siy  = c;
             redln("TODO: var");
             exit(1);
         }
@@ -883,7 +906,6 @@ InstructionDa parse(const TokenDa* tokens, FILE* file) {
                 this.range.smax,   this.range.send,
                 this.i
             );
-            // TODO: parse statement into this
             tk_buff.count = 0;
             i += 4; // name : name =
             while (tokens->ptr[i].type != T_NL) { 
